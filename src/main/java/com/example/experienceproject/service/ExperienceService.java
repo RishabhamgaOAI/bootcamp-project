@@ -1,22 +1,21 @@
 package com.example.experienceproject.service;
 
+import com.example.experienceproject.config.handler.ExperienceHandler;
 import com.example.experienceproject.model.Account;
 import com.example.experienceproject.model.DynamicPrompt;
 import com.example.experienceproject.model.StaticChecklistItem;
 import com.example.experienceproject.model.Experience;
 import com.example.experienceproject.repository.AccountRepository;
 import com.example.experienceproject.repository.ExperienceRepository;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import java.util.Iterator;
-
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,6 +30,9 @@ public class ExperienceService {
     @Autowired
     private AccountRepository accountRepository;
 
+     @Autowired
+    private ExperienceHandler experienceHandler;
+
 
     @Autowired
     private ExperienceRepository experienceRepository;
@@ -39,12 +41,8 @@ public class ExperienceService {
         return accountRepository.findById(accountId).orElse(null);
     }
 
-    private final SimpMessagingTemplate messagingTemplate;
 
-    @Autowired
-    public ExperienceService(SimpMessagingTemplate messagingTemplate) {
-        this.messagingTemplate = messagingTemplate;
-    }
+
     private Experience findExperienceById(Account account, String experienceId) {
         return account.getExperiences().stream()
                 .filter(exp -> exp.getId().equals(experienceId))
@@ -54,34 +52,38 @@ public class ExperienceService {
 
 
     public Experience addStaticChecklistItem(String accountId, String experienceId, StaticChecklistItem newItem) {
-        // Find the account and experience by IDs
-        Account account = getAccountById(accountId);
-        if (account == null) {
-            throw new RuntimeException("Account not found");
+        try {
+            // Finding the account and experience by Ids
+            Account account = getAccountById(accountId);
+            if (account == null) {
+                throw new RuntimeException("Account not found");
+            }
+    
+            Experience experience = findExperienceById(account, experienceId);
+            if (experience == null) {
+                throw new RuntimeException("Experience not found");
+            }
+    
+            // Adding new static checklist item
+            if (experience.getStaticChecklistItems() == null) {
+                experience.setStaticChecklistItems(new ArrayList<>());
+            }
+            experience.getStaticChecklistItems().add(newItem);
+    
+            // updating the experience in the account
+            Update update = new Update().set("experiences.$", experience);
+            Criteria criteria = Criteria.where("id").is(accountId)
+                    .and("experiences.id").is(experienceId);
+            mongoTemplate.findAndModify(
+                    query(criteria),
+                    update,
+                    Account.class
+            );
+    
+            return experience;
+        } catch (Exception e) {
+            throw new RuntimeException("An error occurred while adding the static checklist item", e);
         }
-
-        Experience experience = findExperienceById(account, experienceId);
-        if (experience == null) {
-            throw new RuntimeException("Experience not found");
-        }
-
-        // Add the new static checklist item
-        if (experience.getStaticChecklistItems() == null) {
-            experience.setStaticChecklistItems(new ArrayList<>());
-        }
-        experience.getStaticChecklistItems().add(newItem);
-
-        // Update the experience in the account
-        Update update = new Update().set("experiences.$", experience);
-        Criteria criteria = Criteria.where("id").is(accountId)
-                .and("experiences.id").is(experienceId);
-        mongoTemplate.findAndModify(
-                query(criteria),
-                update,
-                Account.class
-        );
-
-        return experience;
     }
 
 
@@ -303,13 +305,22 @@ public class ExperienceService {
     // Remove agent from an experience
     public Account removeAgentFromExperience(String accountId, String experienceId, String agentId) {
         Update update = new Update().pull("experiences.$.agentIds", agentId);
+
         Criteria criteria = Criteria.where("id").is(accountId)
                 .and("experiences._id").is(experienceId);
-        return mongoTemplate.findAndModify(
+
+        Account updatedAccount = mongoTemplate.findAndModify(
                 new Query(criteria),
                 update,
                 FindAndModifyOptions.options().returnNew(true),
                 Account.class
         );
+
+        if (updatedAccount != null) {
+            experienceHandler.notifyAgentRemoved(accountId, experienceId, agentId);
+        }
+
+        return updatedAccount;
     }
 }
+

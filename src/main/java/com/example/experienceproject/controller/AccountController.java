@@ -19,6 +19,16 @@ public class AccountController {
     @Autowired
     private ExperienceService experienceService;
 
+    @Autowired
+    private AccountService accountService;
+
+    // Endpoimt to add multiple experiences to an account
+    @PostMapping("/{accountId}/experiences")
+    public ResponseEntity<Account> addExperiencesToAccount(@PathVariable String accountId, @RequestBody List<Experience> experiences) {
+        Account updatedAccount = accountService.addExperiencesToAccount(accountId, experiences);
+        return ResponseEntity.ok(updatedAccount);
+    }
+
     // Endpoint to add an agent to an experience
     @PostMapping("/{accountId}/experiences/{experienceId}/agents")
     public ResponseEntity<Account> addAgentToExperience(
@@ -46,8 +56,7 @@ public class AccountController {
     }
 
 
-    @Autowired
-    private AccountService accountService;
+    
     @GetMapping
     public List<Account> getAllAccounts() {
         return accountService.getAllAccounts();
@@ -59,7 +68,7 @@ public class AccountController {
     }
 
     // Endpoint to create an experience for an account
-    @PostMapping("/{accountId}/experiences")
+    @PostMapping("/{accountId}/experience")
     public ResponseEntity<Account> addExperienceToAccount(
             @PathVariable String accountId,
             @RequestBody Experience experience) {

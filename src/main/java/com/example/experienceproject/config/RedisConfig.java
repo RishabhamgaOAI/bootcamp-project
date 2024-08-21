@@ -1,6 +1,4 @@
 package com.example.experienceproject.config;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -31,3 +29,7 @@ public class RedisConfig {
         return template;
     }
 }
+
+
+// redis connection config - deep dive
+// global exception handler - deep dive
